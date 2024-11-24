@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+import PrelineScript from "./components/PrelineScript";
+
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -23,16 +25,24 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+
+
   return (
+    
     <html lang="en">
+      
+      
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <div className="flex h-screen flex-col md:flex-row md:overflow-hidden">
           <div className="flex-grow md-overflow-y-auto">{children}</div>
         </div>
-        
+        <script src="../assets/vendor/lodash/lodash.min.js"></script>
+      <script src="../assets/vendor/sortablejs/Sortable.min.js"></script>
+      
       </body>
+      <PrelineScript />
     </html>
   );
 }
