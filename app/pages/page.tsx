@@ -1,7 +1,7 @@
 'use client';
 
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
-
+import PageTreeView from '@/app/ui/PageTreeView';
 import Tiptap from '@/app/components/tiptap'
 
 
@@ -10,7 +10,14 @@ export default function Pages() {
      <>
       
     <PanelGroup direction="horizontal" id="group">
-      <Panel id="left-panel" defaultSize={25}><div  className="flex h-full  bg-red-800">     </div></Panel>
+    <Panel id="left-panel" defaultSize={25}>
+        
+        <PageTreeView/>
+          
+        
+        
+        
+        </Panel>
       
       <PanelResizeHandle id="resize-handle" hitAreaMargins={{ coarse: 15, fine: 5 }}  >
         
