@@ -4,63 +4,105 @@ import { useEffect } from 'react';
 import { HSAccordion, HSTreeView } from "preline/preline";
 import Sortable from 'sortablejs'
 import _ from 'lodash'
+import TreeView from '../components/TreeView';
 
+//https://stackoverflow.com/questions/54917268/ondragover-equivalent-in-vue-draggable-sortable-js/54960057#54960057
+//https://github.com/SortableJS/Sortable/issues/1468#issuecomment-845128256
 
  export default function PageTreeView() {
-    useEffect(() => {
-        const draggable = document.querySelectorAll('[data-hs-nested-draggable]');
+    // useEffect(() => {
+    //     const draggable = document.querySelectorAll('[data-hs-nested-draggable]');
+    //     const test = document.querySelectorAll('.test');
             
-        draggable.forEach((el) => {
-          const options = {
-            group: 'nested',
-            animation: 150,
-            fallbackOnBody: true,
-            swapThreshold: 0.65,
-            ghostClass: 'dragged',
-            onEnd: (evt) => {
-              const { item } = evt;
+    //     draggable.forEach((el) => {
+    //       const options = {
+    //         group: 'nested',
+    //         animation: 150,
+    //         fallbackOnBody: true,
+    //         swapThreshold: 0.20,
+    //         invertSwap: true,
+    //         ghostClass: 'dragged',
+    //         onStart: (evt) => {
+    //           const draggedItem = evt.item;
+              
+    //           // Add event listeners to monitor hover on potential drop targets
+    //           test.forEach((target) => {
+                
+    //             target.addEventListener('dragenter', (e) => {
+                  
+    //               if (target !== draggedItem) {
+
+    //                 target.style.backgroundColor = 'red'; // Highlight target
+    //               }
+    //             });
+      
+    //             target.addEventListener('dragleave', (e) => {
+    //               if (!target.contains(e.relatedTarget)) {
+    //                 target.style.backgroundColor = ''; // Reset highlight
+    //             }
+    //             });
+    //           });
+    //         },
+    //         onMove: (/**Event*/evt, /**Event*/originalEvent) =>
+    //           {
+                        
+             
+    //             // Remove the border when not dragging over it anymore
+    //             return true; // Returning true allows the move
+    //           },
+    //         onEnd: (evt) => {
+    //           // Reset all styles after dragging ends
+    //           draggable.forEach((target) => {
+    //             target.style.backgroundColor = ''; // Clean up
+    //             target.removeEventListener('dragenter', null);
+    //             target.removeEventListener('dragleave', null);
+    //           });
+
+
+    //           const { item } = evt;
   
-              if (item.classList.contains('hs-accordion')) {
-                let existingInstance = HSAccordion.getInstance(item, true);
-                let updatedInstance;
+    //           if (item.classList.contains('hs-accordion')) {
+    //             let existingInstance = HSAccordion.getInstance(item, true);
+    //             let updatedInstance;
   
-                existingInstance.element.update();
-                updatedInstance = HSAccordion.getInstance(item, true);
-                window.$hsAccordionCollection.map((el) => {
-                  if (
-                    el.element.el !== existingInstance.element.el &&
-                    el.element.group === existingInstance.element.group &&
-                    el.element.el.classList.contains('active') &&
-                    existingInstance.element.el.classList.contains('active')
-                  ) el.element.hide();
+    //             existingInstance.element.update();
+    //             updatedInstance = HSAccordion.getInstance(item, true);
+    //             window.$hsAccordionCollection.map((el) => {
+    //               if (
+    //                 el.element.el !== existingInstance.element.el &&
+    //                 el.element.group === existingInstance.element.group &&
+    //                 el.element.el.classList.contains('active') &&
+    //                 existingInstance.element.el.classList.contains('active')
+    //               ) el.element.hide();
   
-                  return el;
-                });
-              }
+    //               return el;
+    //             });
+    //           }
+              
+    //           if (!!item.hasAttribute('data-hs-tree-view-item')) {
+    //             const treeViewItem = HSTreeView.getInstance(item.closest('[data-hs-tree-view]'), true);
   
-              if (!!item.hasAttribute('data-hs-tree-view-item')) {
-                const treeViewItem = HSTreeView.getInstance(item.closest('[data-hs-tree-view]'), true);
-  
-                treeViewItem.element.update();
-              }
-            },
-          };
-          const data = el.getAttribute('data-hs-nested-draggable');
-          const dataOptions = data ? JSON.parse(data) : {};
-          const sortable = new Sortable(el, _.merge(options, dataOptions));
-        });
-      }, []);
+    //             treeViewItem.element.update();
+    //           }
+    //         },
+    //       };
+    //       const data = el.getAttribute('data-hs-nested-draggable');
+    //       const dataOptions = data ? JSON.parse(data) : {};
+    //       const sortable = new Sortable(el, _.merge(options, dataOptions));
+    //     });
+    //   }, []);
     
     
     return (
-     <>
-    <div id="hs-tree-view-nested" role="tree" aria-orientation="vertical" data-hs-tree-view="">
-  <div data-hs-nested-draggable="">
-    <div className="hs-accordion hs-dragged:bg-blue-100 hs-dragged:rounded nested-1 active" role="treeitem" aria-expanded="true" id="hs-draggable-tree-heading-one" data-hs-tree-view-item='{
-      "value": "assets",
-      "isDir": true
-    }'>
-      <div className="hs-accordion-heading py-0.5 rounded-md flex items-center gap-x-0.5 w-full hs-tree-view-selected:bg-gray-100 dark:hs-tree-view-selected:bg-neutral-700">
+      <TreeView/>
+    
+
+    /* <div data-hs-nested-draggable="">
+      <div className="hs-accordion hs-dragged:bg-blue-100 hs-dragged:rounded nested-1 active" role="treeitem" aria-expanded="true" id="hs-draggable-tree-heading-one" data-hs-tree-view-item='{
+        "value": "assets",
+        "isDir": true
+      }'>
+      <div className="hs-accordion-heading test py-0.5 rounded-md flex items-center gap-x-0.5 w-full hs-tree-view-selected:bg-gray-100 dark:hs-tree-view-selected:bg-neutral-700">
         <button className="hs-accordion-toggle size-6 flex justify-center items-center hover:bg-gray-100 rounded-md focus:outline-none focus:bg-gray-100 disabled:opacity-50 disabled:pointer-events-none dark:hover:bg-neutral-700 dark:focus:bg-neutral-700" aria-expanded="true" aria-controls="hs-draggable-tree-collapse-one">
           <svg className="size-4 text-gray-800 dark:text-neutral-200" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M5 12h14"></path>
@@ -88,7 +130,7 @@ import _ from 'lodash'
             "value": "css",
             "isDir": true
           }'>
-            <div className="hs-accordion-heading py-0.5 rounded-md flex items-center gap-x-0.5 w-full hs-tree-view-selected:bg-gray-100 dark:hs-tree-view-selected:bg-neutral-700">
+            <div className="hs-accordion-heading test py-0.5 rounded-md flex items-center gap-x-0.5 w-full hs-tree-view-selected:bg-gray-100 dark:hs-tree-view-selected:bg-neutral-700">
               <button className="hs-accordion-toggle size-6 flex justify-center items-center hover:bg-gray-100 rounded-md focus:outline-none focus:bg-gray-100 disabled:opacity-50 disabled:pointer-events-none dark:hover:bg-neutral-700 dark:focus:bg-neutral-700" aria-expanded="true" aria-controls="hs-draggable-tree-sub-collapse-one">
                 <svg className="size-4 text-gray-800 dark:text-neutral-200" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M5 12h14"></path>
@@ -116,7 +158,7 @@ import _ from 'lodash'
                   "value": "main",
                   "isDir": true
                 }'>
-                  <div className="hs-accordion-heading py-0.5 rounded-md flex items-center gap-x-0.5 w-full hs-tree-view-selected:bg-gray-100 dark:hs-tree-view-selected:bg-neutral-700">
+                  <div className="hs-accordion-heading py-0.5 test rounded-md flex items-center gap-x-0.5 w-full hs-tree-view-selected:bg-gray-100 dark:hs-tree-view-selected:bg-neutral-700">
                     <button className="hs-accordion-toggle size-6 flex justify-center items-center hover:bg-gray-100 rounded-md focus:outline-none focus:bg-gray-100 disabled:opacity-50 disabled:pointer-events-none dark:hover:bg-neutral-700 dark:focus:bg-neutral-700" aria-expanded="true" aria-controls="hs-draggable-tree-sub-level-two-collapse-one">
                       <svg className="size-4 text-gray-800 dark:text-neutral-200" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M5 12h14"></path>
@@ -200,9 +242,9 @@ import _ from 'lodash'
 
                     <div className="grow hs-tree-view-selected:bg-gray-100 dark:hs-tree-view-selected:bg-neutral-700 px-1.5 rounded-md cursor-pointer">
                       <div className="flex items-center gap-x-3">
-                        <svg className="shrink-0 size-4 text-gray-500 dark:text-neutral-500" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path>
-                        </svg>
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 6 6" width="6" height="6">
+  <circle cx="3" cy="3" r="2" fill="currentColor" />
+</svg>
                         <div className="grow">
                           <span className="text-sm text-gray-800 dark:text-neutral-200">
                             tailwind
@@ -216,7 +258,7 @@ import _ from 'lodash'
                     <div className="ms-3 ps-3 relative before:absolute before:top-0 before:start-0 before:w-0.5 before:-ms-px before:h-full before:bg-gray-100 dark:before:bg-neutral-700" data-hs-nested-draggable="">
                       <div className="hs-tree-view-selected:bg-gray-100 dark:hs-tree-view-selected:bg-neutral-700 px-2 rounded-md cursor-pointer hs-dragged:bg-blue-100 hs-dragged:rounded nested-4" role="treeitem" data-hs-tree-view-item='{
                         "value": "input.css",
-                        "isDir": false
+                        "isDir": true
                       }'>
                         <div className="flex items-center gap-x-3">
                           <svg className="shrink-0 size-4 text-gray-500 dark:text-neutral-500" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -224,7 +266,7 @@ import _ from 'lodash'
                             <path d="M14 2v4a2 2 0 0 0 2 2h4"></path>
                           </svg>
                           <div className="grow">
-                            <span className="text-sm text-gray-800 dark:text-neutral-200">
+                            <span className="text-base text-gray-800 dark:text-neutral-200">
                               input.css
                             </span>
                           </div>
@@ -517,10 +559,10 @@ import _ from 'lodash'
       </div>
     </div>
   </div>
-</div>
+</div> */
 
 
     
-    </>
+
     );
   }
