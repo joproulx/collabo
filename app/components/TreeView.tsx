@@ -3,7 +3,17 @@
 
 import React, { FC, useEffect, useState } from "react";
 import Sortable from "sortablejs";
+import { createId } from '@paralleldrive/cuid2';
 import clsx from 'clsx';
+import axios from 'axios'
+import { PageDto } from '../lib/dtos'
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query'
 
 interface TreeItemData {
   id: string;
@@ -15,68 +25,113 @@ interface TreeItemState {
   isExpanded: boolean;
 }
 
-
 interface TreeState {
   [id: string] : TreeItemState;
 }
 
 
-export default function TreeView () {
+function mapChildrenPages(parentPageId: string | null, pages: PageDto[] | undefined ): TreeItemData[]{
+  if (pages === undefined){
+    return [];
+  }
+
+  return pages.filter(v => v.ParentPageId === parentPageId).map<TreeItemData>(i => 
+  ({
+    id: i.Id,
+    name: i.Title,
+    children: mapChildrenPages(i.Id, pages)
+  }));
+}
+
+function mapRootPages(pages: PageDto[] | undefined) : TreeItemData[]{
+  if (pages === undefined){
+    return [];
+  }
+
+  return pages
+  .filter(v => v.ParentPageId === null).map<TreeItemData>(i => 
+  ({
+    id: i.Id,
+    name: i.Title,
+    children: mapChildrenPages(i.Id, pages)
+  }));
+}
+
+interface Props 
+{ 
+  disableScreen: (disable: boolean) => void; 
+}
 
 
-  useEffect(() =>
-    {
-      // Nested demo
-      var nestedSortables = [].slice.call(document.querySelectorAll('.nested-sortable'));
+
+
+export default function TreeView (props: Props) {
+  const queryClient = useQueryClient()
+
   
-      // Loop through each nested sortable element
-      for (var i = 0; i < nestedSortables.length; i++) {
-        new Sortable(nestedSortables[i], {
-          group: 'nested',
-          animation: 150,
-          fallbackOnBody: true,
-          swapThreshold: 0.65
-        });
-      }
-    });
-  
+  const [pages, setPages] = useState<PageDto[]>([]);
+  const [selectedPage, setSelectedPage] = useState<string|undefined>(undefined);
+  const [itemState, setItemState] = useState<TreeState>({});
+
+  const addPageMutation = useMutation({
+    mutationFn: async (newPage: PageDto) => 
+      {
+        props.disableScreen(true);
+        return await axios.post('http://localhost:3000/api/pages', newPage)
+      },
+      async onSuccess(data, newPage, context) {
+        props.disableScreen(false);
+        setPages(
+          [
+            ...pages,
+            newPage
+          ]);
+        queryClient.invalidateQueries({ queryKey: ['getPages'] })
+        setSelectedPage(newPage.Id);
+    },
+    onError(error, variables, context) {
+      props.disableScreen(false);
+    },
+  })
+
+  function expandNode(pageId: string, isExpanded: boolean){
+    setItemState(
+      {
+        ...itemState,
+        [pageId]:{
+          ...itemState[pageId],
+          isExpanded: isExpanded 
+        }
+      });
+  }
+
+  function addPage(parentPageId: string){
+    let newId = createId();
+    let newPage = {
+      Id: newId,
+      ParentPageId: parentPageId,
+      Title: "[Draft]",
+      SpaceId: 0,
+      State: 1
+    };
+
     
-  const [itemDatas, setItemDatas] = useState<TreeItemData[]>([
-    { id: "1", name: "shrek", children: [
-      { id: "1_1", name: "chrek_baby" },
-      { id: "1_2", name: "chrek_baby2" }
-    ] },
-    { id: "2", name: "fiona" },
-    { id: "3", name: "fiona" },
-    { id: "4", name: "fiona" },
-    { id: "5", name: "fiona" },
-    { id: "6", name: "fiona" },
-    { id: "7", name: "fiona" },
-    { id: "8", name: "fiona" },
-    { id: "9", name: "fiona" },
-    { id: "10", name: "fiona" },
-    { id: "11", name: "fiona" },
-    { id: "12", name: "fiona" },
-    { id: "13", name: "fiona" },
-    { id: "14", name: "fiona" },
-    { id: "15", name: "fiona" },
-  ]);
+
+    addPageMutation.mutate(newPage);
+    expandNode(parentPageId, true);
+  }
+   
 
 
-
-
-  const [itemState, setItemState] = useState<TreeState>({
-
-
-  });
-  
 
 
   let node = (key:string, nodeText: string, children?: TreeItemData[]) => {
-    
     return (
     <div className="list-group-item" key={key}>
-      <div className="flex flex-row items-center  hover:bg-blue-100 group">
+      <div className={clsx('flex flex-row items-center hover:bg-blue-100 group', {
+        'hover:bg-blue-500 bg-blue-300': key === selectedPage,
+        '': key !== selectedPage
+      })} onClick={() => setSelectedPage(key)}>
         <label>
           <input 
             id="link-checkbox" 
@@ -101,10 +156,10 @@ export default function TreeView () {
             'rotate-180': itemState[key]?.isExpanded,
             'rotate-90': !itemState[key]?.isExpanded,
           })}  xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 10 6">
-            { children !== undefined && (
+            { children !== undefined && children.length > 0 && (
               <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5 5 1 1 5"/>)
             }
-            { children === undefined && (
+            { children === undefined || children.length === 0 && (
               <circle cx="2" cy="2" r="2" fill="currentColor" />)
             }
           </svg>
@@ -121,7 +176,16 @@ export default function TreeView () {
             </g>
           </svg>
         </button>
-        <button className=" hover:border-slate-300 hover:border-2 active:bg-slate-200 text-slate-400 rounded w-6 h-6 flex justify-center items-center opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity duration-500 ease-in-out">
+        {/* Add page */}
+        <button className="
+          hover:border-slate-300 hover:border-2 
+          active:bg-slate-200 
+          text-slate-400 
+          rounded 
+          w-6 h-6 
+          flex justify-center items-center 
+          opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity duration-500 ease-in-out"
+          onClick={e => addPage(key)}>
           <svg className="w-4 h-4 p-0.5 fill-slate-600" version="1.1" id="Capa_1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 45.402 45.402">
           <g>
             <path d="M41.267,18.557H26.832V4.134C26.832,1.851,24.99,0,22.707,0c-2.283,0-4.124,1.851-4.124,4.135v14.432H4.141
@@ -134,16 +198,54 @@ export default function TreeView () {
       </div>
       
 
-      {children !== undefined && !!itemState[key]?.isExpanded && (
+      {children !== undefined && children.length > 0 && !!itemState[key]?.isExpanded && (
         <div className="list-group nested-sortable pl-2">{children.map(c => node(c.id, c.name, c.children))}</div>
       )}
     
     </div>)
   };
 
+  
+  useEffect(() =>
+    {
+      var nestedSortables = [].slice.call(document.querySelectorAll('.nested-sortable'));
+  
+      // Loop through each nested sortable element
+      for (var i = 0; i < nestedSortables.length; i++) {
+        new Sortable(nestedSortables[i], {
+          group: 'nested',
+          animation: 150,
+          fallbackOnBody: true,
+          swapThreshold: 0.65
+        });
+      }
+    });
+  
+    console.log("Reloading component");
+  const { isLoading, error, data, isFetching } = useQuery({ queryKey: ['getPages'], queryFn: () => axios
+    .get<PageDto[]>('http://localhost:3000/api/pages')
+    .then((res) => 
+      {
+        console.log("Resultat:" + res.data);
+        setPages(res.data);
+        return res.data;
+      })});
+
+  if (isLoading) {
+     return 'Loading...'
+  }
+
+  if (error) { 
+    return 'An error has occurred: ' + error 
+  }
+
+  let itemDatas = mapRootPages(pages);
   return (
         <div id="nestedDemo" className="list-group col nested-sortable [&>*]:cursor-default">
           {itemDatas.map(c => node(c.id, c.name, c.children))}
       </div> 
   );
+
+
+  
 };

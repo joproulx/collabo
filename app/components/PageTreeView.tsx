@@ -3,8 +3,12 @@
 import React from "react";
 import TreeView from './TreeView'
 
+interface Props 
+{ 
+  disableScreen: (disable: boolean) => void; 
+}
 
-export default function PageTreeView () {
+export default function PageTreeView (props: Props) {
     
 
     return (
@@ -24,7 +28,7 @@ export default function PageTreeView () {
             </svg>
           </button>
         </div>
-        <TreeView/>
+        <TreeView disableScreen={props.disableScreen}/>
         </div>
       </div>
     );
