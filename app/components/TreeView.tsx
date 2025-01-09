@@ -1,9 +1,10 @@
 
 "use client";
 
-import React, { FC, useEffect, useState } from "react";
+import React, { FC, useEffect, useState, useCallback } from "react";
 import Sortable from "sortablejs";
 import { createId } from '@paralleldrive/cuid2';
+import { TreeContextMenu } from "./TreeContextMenu";
 import clsx from 'clsx';
 import axios from 'axios'
 import { PageDto } from '../lib/dtos'
@@ -18,6 +19,7 @@ import {
 interface TreeItemData {
   id: string;
   name: string;
+  order: number;
   children?: TreeItemData[]
 }
 
@@ -29,39 +31,16 @@ interface TreeState {
   [id: string] : TreeItemState;
 }
 
-
-function mapChildrenPages(parentPageId: string | null, pages: PageDto[] | undefined ): TreeItemData[]{
-  if (pages === undefined){
-    return [];
-  }
-
-  return pages.filter(v => v.ParentPageId === parentPageId).map<TreeItemData>(i => 
-  ({
-    id: i.Id,
-    name: i.Title,
-    children: mapChildrenPages(i.Id, pages)
-  }));
-}
-
-function mapRootPages(pages: PageDto[] | undefined) : TreeItemData[]{
-  if (pages === undefined){
-    return [];
-  }
-
-  return pages
-  .filter(v => v.ParentPageId === null).map<TreeItemData>(i => 
-  ({
-    id: i.Id,
-    name: i.Title,
-    children: mapChildrenPages(i.Id, pages)
-  }));
-}
-
 interface Props 
 { 
   disableScreen: (disable: boolean) => void; 
 }
 
+interface MovePageRequestDto {
+  pageId: string;
+  newParentPageId: string | undefined;
+  newOrder: number | undefined;
+}
 
 
 
@@ -73,6 +52,71 @@ export default function TreeView (props: Props) {
   const [selectedPage, setSelectedPage] = useState<string|undefined>(undefined);
   const [itemState, setItemState] = useState<TreeState>({});
 
+  
+  const { isLoading, error, refetch } = useQuery({
+    queryKey: ['getPages'],
+    queryFn: async () => {
+      const res = await axios.get<PageDto[]>('http://localhost:3000/api/pages');
+      console.log("Query data...");
+      return res.data;
+    },
+    onSuccess: (data) => {
+      setPages(data);  
+    }
+  });
+
+  async function refreshPages(){
+    queryClient.invalidateQueries({ queryKey: ['getPages'] })
+        
+    const refetchedData = await refetch();
+      
+    // Manually update state after refetch
+    if (refetchedData.data) {
+      setPages(refetchedData.data);
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Map pages received from api to tree hierarchy that will be used 
+  // to construct the treeview.
+  // ------------------------------------------------------------------
+  const mapRootPages = useCallback( (pagesToMap: PageDto[] | undefined) : TreeItemData[] => {
+    if (pagesToMap === undefined){
+      return [];
+    }
+
+    function mapChildrenPages(parentPageId: string | null, pages: PageDto[] | undefined ): TreeItemData[]{
+      if (pages === undefined){
+        return [];
+      }
+    
+      return pages
+        .filter(v => v.ParentPageId === parentPageId)
+        .map<TreeItemData>(i => 
+          ({
+            id: i.Id,
+            name: i.Title,
+            order: i.Order,
+            children: mapChildrenPages(i.Id, pages)
+          }))
+        .sort((a, b) => a.order - b.order);
+    }
+    
+    return pagesToMap
+      .filter(v => v.ParentPageId === null)
+      .map<TreeItemData>(i => 
+        ({
+          id: i.Id,
+          name: i.Title,
+          order: i.Order,
+          children: mapChildrenPages(i.Id, pagesToMap)
+        }))
+      .sort((a, b) => a.order - b.order);
+  }, [pages]);
+
+  // ------------------------------------------------------------------
+  // Api call to add a new page
+  // ------------------------------------------------------------------
   const addPageMutation = useMutation({
     mutationFn: async (newPage: PageDto) => 
       {
@@ -80,13 +124,17 @@ export default function TreeView (props: Props) {
         return await axios.post('http://localhost:3000/api/pages', newPage)
       },
       async onSuccess(data, newPage, context) {
-        props.disableScreen(false);
+        // Update directly the state for faster ui update. A full refresh will be done after
         setPages(
           [
             ...pages,
             newPage
           ]);
-        queryClient.invalidateQueries({ queryKey: ['getPages'] })
+        
+        props.disableScreen(false);
+        
+        // Call the api to refresh the pages
+        refreshPages();
         setSelectedPage(newPage.Id);
     },
     onError(error, variables, context) {
@@ -94,6 +142,29 @@ export default function TreeView (props: Props) {
     },
   })
 
+  const movePageMutation = useMutation({
+    mutationFn: async (movePageRequest: MovePageRequestDto) => 
+      {
+        props.disableScreen(true);
+        console.log(movePageRequest);
+        return await axios.post('http://localhost:3000/api/movePage', movePageRequest)
+      },
+      async onSuccess(data, movePageRequest, context) {
+        props.disableScreen(false);
+        
+        // Call the api to refresh the pages
+        
+        refreshPages();
+        setSelectedPage(movePageRequest.pageId);
+    },
+    onError(error, movePageRequest, context) {
+      props.disableScreen(false);
+    },
+  })
+
+  // ------------------------------------------------------------------
+  // Expand node in the tree view
+  // ------------------------------------------------------------------
   function expandNode(pageId: string, isExpanded: boolean){
     setItemState(
       {
@@ -105,47 +176,89 @@ export default function TreeView (props: Props) {
       });
   }
 
+  // ------------------------------------------------------------------
+  // Create a new page and call api mto add it to the DB
+  // ------------------------------------------------------------------
   function addPage(parentPageId: string){
-    let newId = createId();
-    let newPage = {
+    const newId = createId();
+    const newPage = {
       Id: newId,
       ParentPageId: parentPageId,
       Title: "[Draft]",
       SpaceId: 0,
-      State: 1
+      State: 1,
+      Order: 0
     };
-
-    
-
     addPageMutation.mutate(newPage);
     expandNode(parentPageId, true);
   }
-   
+  // ------------------------------------------------------------------
+  // Delete a page
+  // ------------------------------------------------------------------
+  const deletePageMutation = useMutation({
+    mutationFn: async (pageId: string) => {
+      props.disableScreen(true);
+      return await axios.delete(`http://localhost:3000/api/pages/${pageId}`);
+    },
+    async onSuccess(data, pageId, context) {
+      props.disableScreen(false);
+      //setPages(pages.filter(page => page.Id !== pageId));
+      queryClient.invalidateQueries({ queryKey: ['getPages'] });
+      refetch();
+      setSelectedPage(undefined);
+    },
+    onError(error, variables, context) {
+      props.disableScreen(false);
+    },
+  });
 
+  function deletePage(pageId: string) {
+    deletePageMutation.mutate(pageId);
+  }
 
+  // const [menuVisible, setMenuVisible] = useState<string | null>(null);
 
+  // function toggleMenu(pageId: string) {
+  //   setMenuVisible(menuVisible === pageId ? null : pageId);
+  // }
 
-  let node = (key:string, nodeText: string, children?: TreeItemData[]) => {
+  // function handleClickOutside(event: MouseEvent) {
+  //   if (!(event.target as HTMLElement).closest('.menu')) {
+  //     setMenuVisible(null);
+  //   }
+  // }
+
+  // useEffect(() => {
+  //   document.addEventListener('click', handleClickOutside);
+  //   return () => {
+  //     document.removeEventListener('click', handleClickOutside);
+  //   };
+  // }, []);
+  
+  // ------------------------------------------------------------------
+  // Component that represent a node in the tree view
+  // ------------------------------------------------------------------
+  let node = (treeItem: TreeItemData) => {
     return (
-    <div className="list-group-item" key={key}>
+    <div className="list-group-item" key={treeItem.id} title={treeItem.id + " " +treeItem.order} >
       <div className={clsx('flex flex-row items-center hover:bg-blue-100 group', {
-        'hover:bg-blue-500 bg-blue-300': key === selectedPage,
-        '': key !== selectedPage
-      })} onClick={() => setSelectedPage(key)}>
+        'hover:bg-blue-500 bg-blue-300': treeItem.id === selectedPage,
+        '': treeItem.id !== selectedPage
+      })} onClick={() => setSelectedPage(treeItem.id)}>
         <label>
           <input 
             id="link-checkbox" 
             type="checkbox" 
             value="" 
             className="hidden peer" 
-            checked={!!itemState[key]?.isExpanded}
+            checked={!!itemState[treeItem.id]?.isExpanded}
             onChange={(e) => {
               setItemState(
               {
                 ...itemState,
-                [key]:{
-                  ...itemState[key],
-                  isExpanded: !itemState[key]?.isExpanded 
+                [treeItem.id]:{
+                  ...itemState[treeItem.id],
+                  isExpanded: !itemState[treeItem.id]?.isExpanded 
                 }
               });
             }
@@ -153,30 +266,22 @@ export default function TreeView (props: Props) {
           
           <svg className={clsx('w-3 h-3  shrink-0 ',
           {
-            'rotate-180': itemState[key]?.isExpanded,
-            'rotate-90': !itemState[key]?.isExpanded,
+            'rotate-180': itemState[treeItem.id]?.isExpanded,
+            'rotate-90': !itemState[treeItem.id]?.isExpanded,
           })}  xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 10 6">
-            { children !== undefined && children.length > 0 && (
+            { treeItem.children !== undefined && treeItem.children.length > 0 && (
               <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5 5 1 1 5"/>)
             }
-            { children === undefined || children.length === 0 && (
+            { treeItem.children === undefined || treeItem.children.length === 0 && (
               <circle cx="2" cy="2" r="2" fill="currentColor" />)
             }
           </svg>
         </label>
         <div className="px-1"/>
-        <span className="grow truncate text-ellipsis">{nodeText}</span>
-        <button className="flex justify-center items-center hover:border-slate-300 hover:border-2 active:bg-slate-200 text-slate-400 rounded w-6 h-6 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity duration-500 ease-in-out">
-          <svg  className="w-4 h-4 p-0.5 fill-slate-600" version="1.1" id="Capa_1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32.055 32.055" >
-            <g>
-              <path d="M3.968,12.061C1.775,12.061,0,13.835,0,16.027c0,2.192,1.773,3.967,3.968,3.967c2.189,0,3.966-1.772,3.966-3.967
-                C7.934,13.835,6.157,12.061,3.968,12.061z M16.233,12.061c-2.188,0-3.968,1.773-3.968,3.965c0,2.192,1.778,3.967,3.968,3.967
-                s3.97-1.772,3.97-3.967C20.201,13.835,18.423,12.061,16.233,12.061z M28.09,12.061c-2.192,0-3.969,1.774-3.969,3.967
-                c0,2.19,1.774,3.965,3.969,3.965c2.188,0,3.965-1.772,3.965-3.965S30.278,12.061,28.09,12.061z"/>
-            </g>
-          </svg>
-        </button>
-        {/* Add page */}
+        <span className="grow truncate text-ellipsis">{treeItem.name}</span>
+        {/* Button '...' (context menu) */}
+            <TreeContextMenu/>
+        {/* Button '+' (add page) */}
         <button className="
           hover:border-slate-300 hover:border-2 
           active:bg-slate-200 
@@ -185,7 +290,7 @@ export default function TreeView (props: Props) {
           w-6 h-6 
           flex justify-center items-center 
           opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity duration-500 ease-in-out"
-          onClick={e => addPage(key)}>
+          onClick={e => addPage(treeItem.id)}>
           <svg className="w-4 h-4 p-0.5 fill-slate-600" version="1.1" id="Capa_1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 45.402 45.402">
           <g>
             <path d="M41.267,18.557H26.832V4.134C26.832,1.851,24.99,0,22.707,0c-2.283,0-4.124,1.851-4.124,4.135v14.432H4.141
@@ -198,12 +303,26 @@ export default function TreeView (props: Props) {
       </div>
       
 
-      {children !== undefined && children.length > 0 && !!itemState[key]?.isExpanded && (
-        <div className="list-group nested-sortable pl-2">{children.map(c => node(c.id, c.name, c.children))}</div>
+      {treeItem.children !== undefined && treeItem.children.length > 0 && !!itemState[treeItem.id]?.isExpanded && (
+        <div className="list-group nested-sortable pl-2" data-page-id={treeItem.id} >{treeItem.children.map(c => node(c))}</div>
       )}
     
     </div>)
   };
+
+  // Helper to update page order in the local state
+  function updatePageOrder(pages: PageDto[], pageId: string | undefined, parentPageId: string | undefined, newIndex: number): PageDto[] {
+    // Remove the page from its current position
+    const pageToMove = pages.find(p => p.Id === pageId);
+    const filteredPages = pages.filter(p => p.Id !== pageId);
+
+    // Insert at the new position
+    if (pageToMove) {
+      pageToMove.ParentPageId = parentPageId ?? null;
+      filteredPages.splice(newIndex, 0, pageToMove);
+    }
+    return filteredPages;
+  }
 
   
   useEffect(() =>
@@ -216,20 +335,53 @@ export default function TreeView (props: Props) {
           group: 'nested',
           animation: 150,
           fallbackOnBody: true,
-          swapThreshold: 0.65
-        });
+          swapThreshold: 0.65,
+          onEnd(event) {
+            
+
+            // let movePageRequest: MovePageRequestDto = {
+            //   pageId: event.item.title,
+            //   newParentPageId: event.to.dataset.pageId,
+            //   newOrder: event.newIndex
+            // };
+            // movePageMutation.mutate(movePageRequest);
+            // console.log(event);
+
+
+
+            const movedPageId = event.item.dataset.pageId;
+            const newParentPageId = event.to.dataset.pageId;
+            const newIndex = event.newIndex;
+
+            // Update the local pages state immediately
+            const updatedPages = updatePageOrder(pages, movedPageId, newParentPageId, newIndex ?? 0);
+            setPages(updatedPages);
+
+            // Prepare the mutation request
+            let movePageRequest: MovePageRequestDto = {
+              pageId: movedPageId ?? "",
+              newParentPageId: newParentPageId,
+              newOrder: newIndex
+            };
+
+            // Perform backend update
+            movePageMutation.mutate(movePageRequest);
+              },
+            });
       }
     });
   
     console.log("Reloading component");
-  const { isLoading, error, data, isFetching } = useQuery({ queryKey: ['getPages'], queryFn: () => axios
-    .get<PageDto[]>('http://localhost:3000/api/pages')
-    .then((res) => 
-      {
-        console.log("Resultat:" + res.data);
-        setPages(res.data);
-        return res.data;
-      })});
+
+  
+  // const { isLoading, error, data, isFetching } = useQuery({ queryKey: ['getPages'], queryFn: () => axios
+  //   .get<PageDto[]>('http://localhost:3000/api/pages')
+  //   .then((res) => 
+  //     {
+  //       console.log("Query data...");
+  //       setPages(res.data);
+  //       return res.data;
+  //     })});
 
   if (isLoading) {
      return 'Loading...'
@@ -242,7 +394,7 @@ export default function TreeView (props: Props) {
   let itemDatas = mapRootPages(pages);
   return (
         <div id="nestedDemo" className="list-group col nested-sortable [&>*]:cursor-default">
-          {itemDatas.map(c => node(c.id, c.name, c.children))}
+          {itemDatas.map(c => node(c))}
       </div> 
   );
 

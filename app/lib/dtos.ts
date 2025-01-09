@@ -5,5 +5,6 @@ export interface PageDto
   ParentPageId: string | null,
   Title: string,
   SpaceId: number,
-  State:number
+  State:number,
+  Order: number
 }
