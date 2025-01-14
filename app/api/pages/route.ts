@@ -11,3 +11,4 @@ export async function POST(request: Request) {
   await addPage(page.Id, page.ParentPageId, page.Title, page.SpaceId, page.State);
   return NextResponse.json({ status: 200 });
 }
+

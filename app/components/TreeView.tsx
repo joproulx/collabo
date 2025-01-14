@@ -25,6 +25,7 @@ interface TreeItemData {
 
 interface TreeItemState {
   isExpanded: boolean;
+  isEditing: boolean;
 }
 
 interface TreeState {
@@ -40,6 +41,12 @@ interface MovePageRequestDto {
   pageId: string;
   newParentPageId: string | undefined;
   newOrder: number | undefined;
+}
+
+
+interface RenamePageRequestDto {
+  pageId: string;
+  title: string | null;
 }
 
 
@@ -140,14 +147,14 @@ export default function TreeView (props: Props) {
     onError(error, variables, context) {
       props.disableScreen(false);
     },
-  })
+  });
 
   const movePageMutation = useMutation({
     mutationFn: async (movePageRequest: MovePageRequestDto) => 
       {
         props.disableScreen(true);
         console.log(movePageRequest);
-        return await axios.post('http://localhost:3000/api/movePage', movePageRequest)
+        return await axios.post('http://localhost:3000/api/movePage', movePageRequest);
       },
       async onSuccess(data, movePageRequest, context) {
         props.disableScreen(false);
@@ -160,7 +167,27 @@ export default function TreeView (props: Props) {
     onError(error, movePageRequest, context) {
       props.disableScreen(false);
     },
-  })
+  });
+
+  const renamePageMutation = useMutation({
+    mutationFn: async (renamePageRequest: RenamePageRequestDto) => 
+      {
+        props.disableScreen(true);
+        const { pageId, ...renamePageRequestDto } = renamePageRequest;
+        return await axios.patch(`http://localhost:3000/api/pages/${renamePageRequest.pageId}`, renamePageRequestDto);
+      },
+      async onSuccess(data, movePageRequest, context) {
+        props.disableScreen(false);
+        
+        
+        refreshPages();
+
+        setSelectedPage(movePageRequest.pageId);
+    },
+    onError(error, movePageRequest, context) {
+      props.disableScreen(false);
+    },
+  });
 
   // ------------------------------------------------------------------
   // Expand node in the tree view
@@ -172,6 +199,17 @@ export default function TreeView (props: Props) {
         [pageId]:{
           ...itemState[pageId],
           isExpanded: isExpanded 
+        }
+      });
+  }
+
+  function editTitleNode(pageId: string, isEditing: boolean){
+    setItemState(
+      {
+        ...itemState,
+        [pageId]:{
+          ...itemState[pageId],
+          isEditing: isEditing 
         }
       });
   }
@@ -192,12 +230,21 @@ export default function TreeView (props: Props) {
     addPageMutation.mutate(newPage);
     expandNode(parentPageId, true);
   }
+
+  function renamePage(pageId: string, title: string){
+    const renamePageRequest = {
+      pageId: pageId,
+      title: title,
+    };
+    renamePageMutation.mutate(renamePageRequest);
+  }
   // ------------------------------------------------------------------
   // Delete a page
   // ------------------------------------------------------------------
   const deletePageMutation = useMutation({
     mutationFn: async (pageId: string) => {
       props.disableScreen(true);
+      editTitleNode(pageId, false);
       return await axios.delete(`http://localhost:3000/api/pages/${pageId}`);
     },
     async onSuccess(data, pageId, context) {
@@ -239,6 +286,19 @@ export default function TreeView (props: Props) {
   // Component that represent a node in the tree view
   // ------------------------------------------------------------------
   let node = (treeItem: TreeItemData) => {
+    const nodeOptions = [
+      {
+        name: 'Rename...',
+        // TODO: when renaming, set page title editable in the tree and handle the change event to rename the page
+        onClick: () => editTitleNode(treeItem.id, true)
+      },
+      {
+        name: 'Delete',
+        onClick: () => deletePage(treeItem.id)
+      }
+    ];
+
+
     return (
     <div className="list-group-item" key={treeItem.id} title={treeItem.id + " " +treeItem.order} >
       <div className={clsx('flex flex-row items-center hover:bg-blue-100 group', {
@@ -278,9 +338,31 @@ export default function TreeView (props: Props) {
           </svg>
         </label>
         <div className="px-1"/>
-        <span className="grow truncate text-ellipsis">{treeItem.name}</span>
+        
+        {itemState[treeItem.id]?.isEditing ? (
+          <input
+            type="text"
+            value={treeItem.name}
+            onChange={(e) => renamePage(treeItem.id, e.target.value)}
+            onBlur={() => editTitleNode(treeItem.id, false)}
+            autoFocus
+          />
+        ) : (
+          <span className="grow truncate text-ellipsis"> treeItem.name </span>
+        )}
         {/* Button '...' (context menu) */}
-            <TreeContextMenu/>
+          <TreeContextMenu options={nodeOptions}>
+            <button className="flex justify-center items-center hover:border-slate-300 hover:border-2 active:bg-slate-200 text-slate-400 rounded w-6 h-6 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity duration-500 ease-in-out">
+              <svg  className="w-4 h-4 p-0.5 fill-slate-600" version="1.1" id="Capa_1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32.055 32.055" >
+                <g>
+                  <path d="M3.968,12.061C1.775,12.061,0,13.835,0,16.027c0,2.192,1.773,3.967,3.968,3.967c2.189,0,3.966-1.772,3.966-3.967
+                    C7.934,13.835,6.157,12.061,3.968,12.061z M16.233,12.061c-2.188,0-3.968,1.773-3.968,3.965c0,2.192,1.778,3.967,3.968,3.967
+                    s3.97-1.772,3.97-3.967C20.201,13.835,18.423,12.061,16.233,12.061z M28.09,12.061c-2.192,0-3.969,1.774-3.969,3.967
+                    c0,2.19,1.774,3.965,3.969,3.965c2.188,0,3.965-1.772,3.965-3.965S30.278,12.061,28.09,12.061z"/>
+                </g>
+              </svg>
+            </button>
+          </TreeContextMenu>
         {/* Button '+' (add page) */}
         <button className="
           hover:border-slate-300 hover:border-2 

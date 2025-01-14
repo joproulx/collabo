@@ -15,6 +15,17 @@ export async function addPage(pageId: string, parentPageId: string | null, title
   await connectionPool.query(query);
 }
 
+export async function updatePage(pageId: string, title: string | null) {
+  if (!title) {
+    return;
+  }
+
+  let query = `
+    UPDATE "Pages" SET "Title" = '${title}' WHERE "Id" = '${pageId}';
+  `;
+  await connectionPool.query(query);
+}
+
 // delete page
 export async function deletePage(pageId: string) {
   const query = `
