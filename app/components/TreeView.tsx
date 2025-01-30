@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { FC, useEffect, useState, useCallback } from "react";
+import React, { FC, useEffect, useState, useCallback, useRef } from "react";
 import Sortable from "sortablejs";
 import { createId } from '@paralleldrive/cuid2';
 import { TreeContextMenu } from "./TreeContextMenu";
@@ -58,7 +58,7 @@ export default function TreeView (props: Props) {
   const [pages, setPages] = useState<PageDto[]>([]);
   const [selectedPage, setSelectedPage] = useState<string|undefined>(undefined);
   const [itemState, setItemState] = useState<TreeState>({});
-
+  // const editTitleElement = useRef<HTMLInputElement>(null);
   
   const { isLoading, error, refetch } = useQuery({
     queryKey: ['getPages'],
@@ -300,11 +300,13 @@ export default function TreeView (props: Props) {
 
 
     return (
-    <div className="list-group-item" key={treeItem.id} title={treeItem.id + " " +treeItem.order} >
+    <div className={clsx("pl-2 ", {
+      "disable-sortable": itemState[treeItem.id]?.isEditing === true
+    })} key={treeItem.id} title={treeItem.id + " " +treeItem.order} >
       <div className={clsx('flex flex-row items-center hover:bg-blue-100 group', {
         'hover:bg-blue-500 bg-blue-300': treeItem.id === selectedPage,
         '': treeItem.id !== selectedPage
-      })} onClick={() => setSelectedPage(treeItem.id)}>
+      })} onClick={() => setSelectedPage(treeItem.id)} >
         <label>
           <input 
             id="link-checkbox" 
@@ -341,14 +343,31 @@ export default function TreeView (props: Props) {
         
         {itemState[treeItem.id]?.isEditing ? (
           <input
+            ref={(el) => {
+              if (el) {
+               // setTimeout(() => {
+                  el.focus();
+                  el.setSelectionRange(el.value.length, el.value.length);
+              //  }, 0);                
+              }
+            }}
+            className="edit-title"
             type="text"
-            value={treeItem.name}
-            onChange={(e) => renamePage(treeItem.id, e.target.value)}
-            onBlur={() => editTitleNode(treeItem.id, false)}
-            autoFocus
+            defaultValue={treeItem.name}
+            onBlur={(e) => {
+              renamePage(treeItem.id, e.target.value);
+              editTitleNode(treeItem.id, false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                renamePage(treeItem.id, e.currentTarget.value);
+                editTitleNode(treeItem.id, false);
+              }
+            }}
+            
           />
         ) : (
-          <span className="grow truncate text-ellipsis"> treeItem.name </span>
+          <span className="grow truncate text-ellipsis"> {treeItem.name} </span>
         )}
         {/* Button '...' (context menu) */}
           <TreeContextMenu options={nodeOptions}>
@@ -386,9 +405,9 @@ export default function TreeView (props: Props) {
       
 
       {treeItem.children !== undefined && treeItem.children.length > 0 && !!itemState[treeItem.id]?.isExpanded && (
-        <div className="list-group nested-sortable pl-2" data-page-id={treeItem.id} >{treeItem.children.map(c => node(c))}</div>
+        <div className="nested-sortable" data-page-id={treeItem.id} >{treeItem.children.map(c => node(c))}</div>
       )}
-    
+      
     </div>)
   };
 
@@ -409,15 +428,30 @@ export default function TreeView (props: Props) {
   
   useEffect(() =>
     {
-      var nestedSortables = [].slice.call(document.querySelectorAll('.nested-sortable'));
+      //var nestedSortables: HTMLElement[] = Array.from(document.querySelectorAll('.nested-sortable'));
   
+      // const editTitleElement = document.querySelector('.edit-title') as HTMLInputElement;
+      // console.log('editElement: ' + editTitleElement);
+      // editTitleElement?.focus();
+      // editTitleElement?.setSelectionRange(0, editTitleElement.value.length);
+
       // Loop through each nested sortable element
-      for (var i = 0; i < nestedSortables.length; i++) {
-        new Sortable(nestedSortables[i], {
+      const nestedSortables = [].slice.call(document.querySelectorAll('.nested-sortable'));
+      console.log("use effects: " + nestedSortables.map((sortable: HTMLElement) => sortable.title).join(', '));
+      const sortableInstances = nestedSortables.map((sortableElement) => {
+        
+
+
+
+        return Sortable.create(sortableElement, {
           group: 'nested',
           animation: 150,
           fallbackOnBody: true,
           swapThreshold: 0.65,
+          filter: '.disable-sortable',
+          //handle: '.nested-sortable',
+          //draggable: '.nested-sortable',
+          preventOnFilter: false,
           onEnd(event) {
             
 
@@ -431,28 +465,42 @@ export default function TreeView (props: Props) {
 
 
 
-            const movedPageId = event.item.dataset.pageId;
-            const newParentPageId = event.to.dataset.pageId;
-            const newIndex = event.newIndex;
+                // const movedPageId = event.item.dataset.pageId;
+                // const newParentPageId = event.to.dataset.pageId;
+                // const newIndex = event.newIndex;
 
-            // Update the local pages state immediately
-            const updatedPages = updatePageOrder(pages, movedPageId, newParentPageId, newIndex ?? 0);
-            setPages(updatedPages);
+                // // Update the local pages state immediately
+                // const updatedPages = updatePageOrder(pages, movedPageId, newParentPageId, newIndex ?? 0);
+                // setPages(updatedPages);
 
-            // Prepare the mutation request
-            let movePageRequest: MovePageRequestDto = {
-              pageId: movedPageId ?? "",
-              newParentPageId: newParentPageId,
-              newOrder: newIndex
-            };
+                // // Prepare the mutation request
+                // let movePageRequest: MovePageRequestDto = {
+                //   pageId: movedPageId ?? "",
+                //   newParentPageId: newParentPageId,
+                //   newOrder: newIndex
+                // };
 
-            // Perform backend update
-            movePageMutation.mutate(movePageRequest);
+                // // Perform backend update
+                // movePageMutation.mutate(movePageRequest);
               },
             });
-      }
-    });
+
+            
+           
+      });
+
+      
+      return () => {
+        console.log("destroy sortable: " + sortableInstances.map((sortable) => sortable.el.title).join(', '));
+        sortableInstances.forEach(instance => instance.destroy());
+      };
+
+      
+      
+
+    }, [pages, itemState]);
   
+    
     console.log("Reloading component");
 
   
@@ -475,7 +523,7 @@ export default function TreeView (props: Props) {
 
   let itemDatas = mapRootPages(pages);
   return (
-        <div id="nestedDemo" className="list-group col nested-sortable [&>*]:cursor-default">
+        <div id="nestedDemo" className="col nested-sortable [&>*]:cursor-default">
           {itemDatas.map(c => node(c))}
       </div> 
   );
